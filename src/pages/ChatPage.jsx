@@ -1,67 +1,93 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Send, Search, Plus, Video, Lock, CheckCircle } from 'lucide-react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { ArrowLeft, Send, Search, Plus, Video, Lock, CheckCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { db } from '../firebase';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function ChatPage() {
     const navigate = useNavigate();
     const { orderId } = useParams();
     const { user, addNotification, orders } = useApp();
+    const location = useLocation();
+
+    // Use job data from navigation state if available, else derive from context
+    const navJob = location.state?.job;
+    const activeOrder = navJob || orders.find(o => o.id === orderId);
+
     const [message, setMessage] = useState('');
+    const [messages, setMessages] = useState([]);
+    const [loading, setLoading] = useState(true);
     const messagesEndRef = useRef(null);
 
-    // Get Active Order
-    const activeOrder = orders.find(o => o.id === orderId);
     const isLocked = activeOrder?.status === 'Done';
-
-    // Mock Messages
-    const [messages, setMessages] = useState([
-        { id: 1, sender: 'me', text: 'Halo kak, untuk tugas ini apakah sudah sesuai?', time: '10:30' },
-        { id: 2, sender: 'other', text: 'Sedang saya cek ya, sebentar.', time: '10:32' },
-    ]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    // Real-time Messages Sync
+    useEffect(() => {
+        if (!orderId) return;
+
+        const messagesRef = collection(db, 'jobs', orderId, 'messages');
+        const q = query(messagesRef, orderBy('createdAt', 'asc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const msgs = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setMessages(msgs);
+            setLoading(false);
+            scrollToBottom();
+        });
+
+        return () => unsubscribe();
+    }, [orderId]);
+
+    // Auto-scroll on new message
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    const handleSend = (e) => {
+    const handleSend = async (e) => {
         e.preventDefault();
         if (!message.trim() || isLocked) return;
 
-        const newMsg = {
-            id: Date.now(),
-            sender: 'me',
-            text: message,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        setMessages(prev => [...prev, newMsg]);
-        setMessage('');
-
-        // Simulate Reply
-        setTimeout(() => {
-            const replyMsg = {
-                id: Date.now() + 1,
-                sender: 'other',
-                text: 'Baik, pengerjaan akan saya lanjutkan.',
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            setMessages(prev => [...prev, replyMsg]);
-
-            // Push Notification
-            addNotification({
-                title: `Pesan Baru (Order #${activeOrder?.id?.slice(-4)})`,
-                desc: replyMsg.text,
-                type: 'info'
+        try {
+            const messagesRef = collection(db, 'jobs', orderId, 'messages');
+            await addDoc(messagesRef, {
+                text: message,
+                sender: user?.name || 'Anonymous',
+                role: user?.role || 'student',
+                createdAt: serverTimestamp()
             });
-        }, 2000);
+
+            setMessage('');
+
+            // Send notification to the "other" party (Simulated logic since we don't have separate auth sessions to check online status)
+            // In a real app, Cloud Functions would handle this.
+            /* 
+            if (activeOrder) {
+               // Logic to notify recipient
+            } 
+            */
+
+        } catch (err) {
+            console.error("Failed to send message:", err);
+        }
     };
 
-    if (!activeOrder) {
+    if (loading && !messages.length) {
+        return (
+            <div className="h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+            </div>
+        );
+    }
+
+    if (!activeOrder && !loading) {
         return (
             <div className="h-screen flex items-center justify-center bg-slate-50">
                 <div className="text-center">
@@ -87,11 +113,11 @@ export default function ChatPage() {
                     </div>
                     <div>
                         <h2 className="font-bold text-sm leading-tight flex items-center gap-2">
-                            {activeOrder.tutorName || 'Tutor'}
+                            {activeOrder?.tutorName || 'Tutor'}
                             {isLocked && <span className="bg-red-500 text-[10px] px-1.5 rounded">Selesai</span>}
                         </h2>
                         <p className="text-xs text-slate-300 line-clamp-1 w-40">
-                            {activeOrder.title}
+                            {activeOrder?.title || 'Chat Room'}
                         </p>
                     </div>
                 </div>
@@ -110,7 +136,7 @@ export default function ChatPage() {
                 <div className="bg-blue-50 border-b border-blue-100 p-3 flex items-center gap-3 shadow-sm z-10">
                     <CheckCircle className="w-5 h-5 text-blue-500" />
                     <div>
-                        <h3 className="font-bold text-blue-900 text-xs">Status: {activeOrder.status}</h3>
+                        <h3 className="font-bold text-blue-900 text-xs">Status: {activeOrder?.status}</h3>
                         <p className="text-blue-700 text-[10px]">Chat akan dikunci otomatis setelah tugas selesai.</p>
                     </div>
                 </div>
@@ -118,15 +144,21 @@ export default function ChatPage() {
 
             {/* Chat Body */}
             <div className={`flex-1 overflow-y-auto p-4 space-y-4 bg-[#F0F2F5] ${isLocked ? 'opacity-80' : ''}`}>
+                {messages.length === 0 && (
+                    <div className="text-center py-10 opacity-50 text-sm">
+                        Belum ada pesan. Mulai percakapan sekarang!
+                    </div>
+                )}
+
                 {messages.map(msg => (
-                    <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[75%] p-4 shadow-sm relative text-sm leading-relaxed ${msg.sender === 'me'
+                    <div key={msg.id} className={`flex ${msg.sender === user?.name || msg.role === user?.role ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[75%] p-4 shadow-sm relative text-sm leading-relaxed ${(msg.sender === user?.name || msg.role === user?.role)
                                 ? 'bg-[#DCF8C6] text-slate-900 rounded-2xl rounded-tr-none'
                                 : 'bg-white text-slate-900 rounded-2xl rounded-tl-none'
                             }`}>
                             <p>{msg.text}</p>
-                            <span className={`text-[10px] block mt-1 text-right ${msg.sender === 'me' ? 'text-slate-500' : 'text-slate-400'}`}>
-                                {msg.time}
+                            <span className={`text-[10px] block mt-1 text-right ${(msg.sender === user?.name || msg.role === user?.role) ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Sending...'}
                             </span>
                         </div>
                     </div>

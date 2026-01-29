@@ -1,20 +1,19 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, addDoc, updateDoc, doc, onSnapshot, query, where, getDocs, setDoc } from 'firebase/firestore';
 
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-    // Mock User Data
-    const [user, setUser] = useState(() => {
-        const saved = localStorage.getItem('sinedi_user');
-        return saved ? JSON.parse(saved) : {
-            name: 'Mahasiswa',
-            role: 'student',
-            wallet: 750000,
-            availability: { days: ['Senin', 'Rabu', 'Jumat'], timeStart: '09:00', timeEnd: '17:00' } // Default for potential tutor
-        };
-    });
+    // User State - Managed via Firestore (fetch on login)
+    // Removed localStorage logic as requested.
+    const [user, setUser] = useState(null);
 
-    // Mock Tutors Data (Global for sync)
+    // Orders State - Live from Firestore
+    const [orders, setOrders] = useState([]);
+
+    // Mock Tutors Data (Static for now)
     const [tutors, setTutors] = useState([
         {
             id: 1, name: 'Budi Santoso', skill: 'Matematika & Fisika', rate: 4.9, color: 'bg-blue-100', price: 100000,
@@ -34,45 +33,7 @@ export function AppProvider({ children }) {
         },
     ]);
 
-    // Persist State
-    useEffect(() => {
-        localStorage.setItem('sinedi_user', JSON.stringify(user));
-    }, [user]);
-
-    // Update Tutors List when User (Tutor) updates profile
-    useEffect(() => {
-        if (user && user.role === 'tutor') {
-            setTutors(prev => prev.map(t => {
-                if (t.name === user.name) {
-                    return {
-                        ...t,
-                        // Sync specific fields that Student sees
-                        availability: user.availability || t.availability,
-                        price: user.price || t.price // Assume user.price exists if they set it
-                        // Add more fields if needed
-                    };
-                }
-                return t;
-            }));
-        }
-    }, [user]); // Run whenever user updates
-
-    // Mock Orders Data with Persistence
-    const [orders, setOrders] = useState(() => {
-        const saved = localStorage.getItem('sinedi_orders');
-        return saved ? JSON.parse(saved) : [
-            { id: 'ORD-12345', title: 'Calculus Assignment 2', type: 'joki', status: 'In Progress', deadline: 'Besok', price: 150000 },
-            { id: 'ORD-67890', title: 'Makalah Sejarah', type: 'joki', status: 'Done', deadline: 'Kemarin', price: 75000 },
-            { id: 'ORD-11223', title: 'Joki Coding (React)', type: 'joki', status: 'Queue', deadline: 'Lusa', price: 300000 },
-            { id: 'ORD-99887', title: 'Mentoring Skripsi UI/UX', type: 'mentoring', status: 'In Progress', deadline: 'Hari ini', price: 200000, tutorName: 'Mahasiswa' },
-        ];
-    });
-
-    useEffect(() => {
-        localStorage.setItem('sinedi_orders', JSON.stringify(orders));
-    }, [orders]);
-
-    // Mock Video Data (Global)
+    // Mock Video Data (Static)
     const [videos, setVideos] = useState([
         { id: 1, title: 'Mastering Calculus 1', price: 50000, color: 'bg-red-500', category: 'Sains', tutorName: 'Dr. Math', url: 'https://youtube.com/mockvideo1' },
         { id: 2, title: 'Dasar Pemrograman Python', price: 75000, color: 'bg-blue-500', category: 'Programming', tutorName: 'Code Master', url: 'https://youtube.com/mockvideo2' },
@@ -82,26 +43,7 @@ export function AppProvider({ children }) {
         { id: 6, title: 'UI/UX Design 101', price: 65000, color: 'bg-pink-500', category: 'Desain', tutorName: 'Creative Mind', url: 'https://youtube.com/mockvideo6' },
     ]);
 
-    // ... (persistance code stays same or is omitted if not in viewing range, but I'll trust the context)
-    // Wait, the REPLACE block needs to match exact context.
-    // I will target the videos block and the payOrder block separately using MultiReplace if possible, but the tools are distinct.
-    // I'll do this in two chunks if needed, or if they are close enough (lines 32 and 88 are far).
-    // I'll use multi_replace_file_content since I need to edit two separate blocks.
-    // WAIT: I don't have multi_replace available in this turn? I DO have `multi_replace_file_content`.
-    // I will use `replace_file_content` for now, just applied twice if need be.
-    // Actually, `payOrder` is at line 88. `videos` is at line 32.
-    // I will use `multi_replace_file_content`.
-
-    // Oh wait, I am the model. I should check if I have `multi_replace_file_content`. YES I DO.
-    // So I will use that.
-
-
-    // Persist State
-    useEffect(() => {
-        localStorage.setItem('sinedi_user', JSON.stringify(user));
-    }, [user]);
-
-    // Mock Notifications Data
+    // Notifications (Local)
     const [notifications, setNotifications] = useState([
         { id: 1, title: 'Pembayaran Berhasil', desc: 'Pembayaran terkonfirmasi.', type: 'success', time: 'Baru saja', isRead: false },
         { id: 2, title: 'Tutor Menemukanmu!', desc: 'Kak Andi mengambil tugasmu.', type: 'info', time: '5m lalu', isRead: false },
@@ -111,127 +53,174 @@ export function AppProvider({ children }) {
     // Global Alert State
     const [globalAlert, setGlobalAlert] = useState({ show: false, type: 'info', title: '', message: '' });
 
-    // Actions
-    // Actions
-    const login = (username, role) => {
-        setUser({
-            name: username,
-            role: role,
-            wallet: role === 'tutor' ? 2500000 : 750000, // Different mock wallet for fun
-            availability: { days: ['Senin', 'Rabu', 'Jumat'], timeStart: '09:00', timeEnd: '17:00' }
+    // Sync Orders from Firestore ('jobs' collection)
+    useEffect(() => {
+        const q = collection(db, 'jobs');
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const jobsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            // Sort by createdAt descending
+            setOrders(jobsData.sort((a, b) => b.createdAt?.localeCompare(a.createdAt) || 0));
+        }, (error) => {
+            console.error("Error connecting to Firebase:", error);
         });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Actions
+    const login = async (username, role) => {
+        try {
+            const q = query(collection(db, 'users'), where("name", "==", username));
+            const querySnapshot = await getDocs(q);
+
+            let userData;
+            if (!querySnapshot.empty) {
+                const userDoc = querySnapshot.docs[0];
+                userData = { id: userDoc.id, ...userDoc.data() };
+            } else {
+                // Register new user
+                const newUser = {
+                    name: username,
+                    role: role,
+                    wallet: role === 'tutor' ? 2500000 : 750000,
+                    availability: { days: ['Senin', 'Rabu', 'Jumat'], timeStart: '09:00', timeEnd: '17:00' },
+                    createdAt: new Date().toISOString()
+                };
+                const colRef = collection(db, 'users');
+                const docRef = await addDoc(colRef, newUser);
+                userData = { id: docRef.id, ...newUser };
+            }
+            setUser(userData);
+        } catch (err) {
+            console.error("Login failed:", err);
+            showAlert("Gagal login: " + err.message, "Error", "error");
+        }
     };
 
-    const updateProfile = (updatedData) => {
-        setUser(prev => ({
-            ...prev,
-            ...updatedData,
-            availability: { ...prev.availability, ...(updatedData.availability || {}) },
-            tutorProfile: { ...prev.tutorProfile, ...(updatedData.tutorProfile || {}) }
-        }));
-    };
+    const logout = () => setUser(null);
 
     const switchMode = () => {
-        setUser(prev => {
-            const isStudent = prev.role === 'student';
-            return {
-                ...prev,
-                role: isStudent ? 'tutor' : 'student',
-                name: isStudent ? 'Nedi Suryadi' : 'Budi Santoso', // Auto-switch persona for better demo flow
-                wallet: isStudent ? 2500000 : 750000
-            };
-        });
+        if (!user) return;
+        const newRole = user.role === 'student' ? 'tutor' : 'student';
+        const newName = user.role === 'student' ? 'Nedi Suryadi' : 'Budi Santoso';
+        login(newName, newRole);
+    };
+
+    const createOrder = (orderData) => {
+        // Generate ID synchronously
+        const newOrderRef = doc(collection(db, 'jobs'));
+        const newOrder = {
+            id: newOrderRef.id,
+            status: 'Unpaid',
+            createdAt: new Date().toISOString(),
+            ...orderData
+        };
+
+        // Async write (fire & forget)
+        setDoc(newOrderRef, newOrder)
+            .then(() => {
+                // Send notification for mentoring
+                if (orderData.tutorName) {
+                    addNotification({
+                        title: 'Permintaan Mentoring Baru',
+                        desc: `Ada request masuk: ${orderData.title}`,
+                        type: 'info'
+                    });
+                }
+            })
+            .catch(err => console.error("Create order failed:", err));
+
+        return newOrderRef.id;
+    };
+
+    const updateOrder = async (orderId, data) => {
+        try {
+            const orderRef = doc(db, 'jobs', orderId);
+            await updateDoc(orderRef, data);
+        } catch (err) {
+            console.error("Update order failed:", err);
+        }
+    };
+
+    const payOrder = async (orderId) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        const orderRef = doc(db, 'jobs', orderId);
+        try {
+            if (order.type === 'video') {
+                await updateDoc(orderRef, {
+                    status: 'Done',
+                    result: { type: 'link', name: 'Tonton Video', url: order.videoUrl || 'https://youtube.com' }
+                });
+            } else {
+                await updateDoc(orderRef, { status: 'Queue' });
+            }
+        } catch (err) {
+            console.error("Pay order failed:", err);
+        }
+    };
+
+    const takeJob = async (orderId) => {
+        const activeJobs = orders.filter(o => o.status === 'In Progress' && o.tutorName === user.name).length;
+        if (activeJobs >= 3) {
+            showAlert('Batas maksimal 3 pekerjaan sekaligus!', 'Batas Tercapai', 'error');
+            return;
+        }
+
+        const orderRef = doc(db, 'jobs', orderId);
+        await updateDoc(orderRef, { status: 'In Progress', tutorName: user.name });
+    };
+
+    const finishJob = async (orderId, result = null) => {
+        const orderRef = doc(db, 'jobs', orderId);
+        const order = orders.find(o => o.id === orderId);
+
+        await updateDoc(orderRef, { status: 'Done', result });
+
+        if (user && user.id && order) {
+            const userRef = doc(db, 'users', user.id);
+            const newWallet = (user.wallet || 0) + order.price;
+            await updateDoc(userRef, { wallet: newWallet });
+            setUser(prev => ({ ...prev, wallet: newWallet }));
+        }
+    };
+
+    const withdrawFunds = async (amount) => {
+        if (user.wallet >= amount) {
+            const userRef = doc(db, 'users', user.id);
+            const newWallet = user.wallet - amount;
+            await updateDoc(userRef, { wallet: newWallet });
+            setUser(prev => ({ ...prev, wallet: newWallet }));
+            return true;
+        }
+        return false;
+    };
+
+    const updateProfile = async (updatedData) => {
+        if (!user || !user.id) return;
+        const userRef = doc(db, 'users', user.id);
+
+        const newData = {
+            ...updatedData,
+            availability: { ...(user.availability || {}), ...(updatedData.availability || {}) },
+            tutorProfile: { ...(user.tutorProfile || {}), ...(updatedData.tutorProfile || {}) }
+        };
+
+        await updateDoc(userRef, newData);
+        setUser(prev => ({ ...prev, ...newData }));
+    };
+
+    const addVideo = (videoData) => {
+        const newVideo = { id: Date.now(), color: 'bg-indigo-500', ...videoData };
+        setVideos([newVideo, ...videos]);
     };
 
     const markAllRead = () => {
         setNotifications(notifications.map(n => ({ ...n, isRead: true })));
-    };
-
-    const createOrder = (orderData) => {
-        const newOrder = {
-            id: `ORD-${Math.floor(Math.random() * 100000)}`,
-            status: 'Unpaid',
-            ...orderData
-        };
-        setOrders([newOrder, ...orders]);
-
-        // If it's a Direct Request (Mentoring), Notify the specific Tutor immediately (Simulated)
-        if (orderData.tutorName) {
-            const notif = {
-                id: Date.now() + 1,
-                title: 'Permintaan Mentoring Baru',
-                desc: `Ada request masuk: ${orderData.title}`,
-                type: 'info',
-                isRead: false,
-                targetUser: orderData.tutorName // We would need filtering logic in Dashboard, but for simplicity assuming global notif list filtered by user relevance or just pushing to global for now
-            };
-            // In a real app, this would go to the backend. Here we push to a "notifications" array that we filter? 
-            // Current AppContext has simplistic 'notifications' state.
-            // Let's assume we append to it.
-            setNotifications(prev => [notif, ...prev]);
-        }
-
-        return newOrder.id;
-    };
-
-    const addVideo = (videoData) => {
-        const newVideo = {
-            id: Date.now(),
-            color: 'bg-indigo-500', // Default color for new uploads
-            ...videoData
-        };
-        setVideos([newVideo, ...videos]);
-    };
-
-    const updateOrder = (orderId, data) => {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...data } : o));
-    };
-
-    const payOrder = (orderId) => {
-        setOrders(prevOrders => prevOrders.map(o => {
-            if (o.id === orderId) {
-                // If it's a video, complete it immediately
-                if (o.type === 'video') {
-                    return {
-                        ...o,
-                        status: 'Done',
-                        result: { type: 'link', name: 'Tonton Video', url: o.videoUrl || 'https://youtube.com' }
-                    };
-                }
-                // Else (Joki), put in Queue
-                return { ...o, status: 'Queue' };
-            }
-            return o;
-        }));
-    };
-
-    const takeJob = (orderId) => {
-        setOrders(orders.map(o => o.id === orderId ? { ...o, status: 'In Progress', tutorName: user.name } : o));
-    };
-
-    const finishJob = (orderId, result = null) => {
-        const order = orders.find(o => o.id === orderId);
-        if (order) {
-            // Update Order Status
-            setOrders(orders.map(o => o.id === orderId ? { ...o, status: 'Done', result } : o));
-
-            // Add Funds to User Wallet (Mock)
-            setUser(prev => ({
-                ...prev,
-                wallet: (prev.wallet || 0) + order.price
-            }));
-        }
-    };
-
-    const withdrawFunds = (amount) => {
-        if (user.wallet >= amount) {
-            setUser(prev => ({
-                ...prev,
-                wallet: prev.wallet - amount
-            }));
-            return true;
-        }
-        return false;
     };
 
     const addNotification = (notif) => {
@@ -253,10 +242,10 @@ export function AppProvider({ children }) {
 
     return (
         <AppContext.Provider value={{
-            user, orders, login, logout: () => setUser(null), switchMode, // Added switchMode
+            user, orders, login, logout, switchMode,
             createOrder, payOrder, takeJob, finishJob, withdrawFunds,
             videos, addVideo, tutors, notifications, markAllRead, updateProfile, updateOrder,
-            addNotification, globalAlert, showAlert, closeAlert // Export global alert
+            addNotification, globalAlert, showAlert, closeAlert
         }}>
             {children}
         </AppContext.Provider>

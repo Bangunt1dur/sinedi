@@ -213,6 +213,23 @@ export default function Dashboard() {
                             </div>
                             <h2 className="text-3xl font-bold text-slate-900">{inProgressTasks}</h2>
                             <p className="text-sm text-slate-500">Dalam Proses</p>
+
+                            {/* Chat Button for Active Jobs (If any) */}
+                            {inProgressTasks > 0 && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        // Find active job to chat (simpler logic: find first in progress)
+                                        const activeJob = orders.find(o => ['In Progress', 'Queue'].includes(o.status));
+                                        if (activeJob) {
+                                            navigate(`/chat/${activeJob.id}`, { state: { job: activeJob } });
+                                        }
+                                    }}
+                                    className="mt-2 text-xs bg-white text-blue-600 px-3 py-1.5 rounded-lg font-bold border border-blue-200 hover:bg-blue-50 shadow-sm"
+                                >
+                                    Chat Tutor
+                                </button>
+                            )}
                         </div>
                     </div>
 

@@ -270,7 +270,7 @@ export default function ActivityPage() {
                                                                 <input
                                                                     type="text"
                                                                     placeholder="https://drive.google.com/..."
-                                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-indigo-500 outline-none"
                                                                     value={resultLink}
                                                                     onChange={(e) => setResultLink(e.target.value)}
                                                                 />

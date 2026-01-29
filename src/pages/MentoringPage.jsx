@@ -56,9 +56,24 @@ export default function MentoringPage() {
             tutorName: selectedTutor.name // ALERT: Ensure strict tutor assignment
         });
 
+        // Construct full job object for immediate navigation state
+        const jobData = {
+            id: orderId,
+            title,
+            type: 'mentoring',
+            deadline: sortedSlots[0],
+            difficulty: 'mentor',
+            price: finalPrice,
+            details: details,
+            tutorName: selectedTutor.name,
+            status: 'Unpaid', // Default status from createOrder
+            createdAt: new Date().toISOString()
+        };
+
         setShowBookingModal(false);
         // Direct navigation to remove friction and avoid "stuck" feeling
-        navigate(`/payment/${orderId}`);
+        // Pass job data in state to avoid Firestore latency on next page
+        navigate(`/payment/${orderId}`, { state: { job: jobData } });
     };
 
     const handleCloseNotification = () => {

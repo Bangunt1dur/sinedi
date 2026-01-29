@@ -1,15 +1,47 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock } from 'lucide-react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import qrisImg from '../assets/qris.png'; // Make sure this exists or use placeholder
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function PaymentPage() {
     const { id } = useParams();
-    const { orders, payOrder } = useApp();
+    const { payOrder } = useApp();
     const navigate = useNavigate();
+    const location = useLocation();
 
-    const order = orders.find(o => o.id === id);
+    const [order, setOrder] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchOrder = async () => {
+            // 1. Check if order data passed via navigation state (Fastest)
+            if (location.state?.job) {
+                setOrder(location.state.job);
+                setLoading(false);
+                return;
+            }
+
+            // 2. Fallback to Firestore if fresh load/refresh
+            try {
+                const docRef = doc(db, 'jobs', id);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    setOrder({ id: docSnap.id, ...docSnap.data() });
+                } else {
+                    console.error("No such order!");
+                }
+            } catch (error) {
+                console.error("Error fetching order:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchOrder();
+    }, [id, location.state]);
 
     // Timer Logic
     const [timeLeft, setTimeLeft] = useState(900); // 15 minutes
@@ -26,7 +58,18 @@ export default function PaymentPage() {
         return `${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
-    if (!order) return <div className="p-10">Order not found</div>;
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+                    <p className="text-slate-500 text-sm font-bold">Memuat Detail Pembayaran...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!order) return <div className="p-10 text-center text-slate-500 font-bold">Order not found. Silakan kembali ke menu utama.</div>;
 
     const handleConfirmPayment = () => {
         payOrder(id);
