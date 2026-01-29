@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy-900: #0f172a;
+}
+
+@layer base {
+  body {
+    @apply bg-navy-900 text-white min-h-screen;
+  }
+}
