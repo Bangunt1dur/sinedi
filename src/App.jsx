@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import ChatPage from './pages/ChatPage';
 import NotificationPage from './pages/NotificationPage';
 import TutorSchedulePage from './pages/TutorSchedulePage';
+import AdminWithdrawPage from './pages/AdminWithdrawPage';
 
 import EditProfilePage from './pages/EditProfilePage';
 import WalletHistoryPage from './pages/WalletHistoryPage';
@@ -84,6 +85,11 @@ function App() {
           <Route path="/reviews" element={
             <ProtectedRoute>
               <ReviewsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/withdraw" element={
+            <ProtectedRoute>
+              <AdminWithdrawPage />
             </ProtectedRoute>
           } />
 

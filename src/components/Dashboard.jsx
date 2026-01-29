@@ -2,8 +2,34 @@ import { Link } from 'react-router-dom';
 import { Bell, Search, Home, User } from 'lucide-react';
 import DashboardGrid from './DashboardGrid';
 import logoImage from '../assets/logo.png';
+import { useApp } from '../context/AppContext';
 
 export default function Dashboard() {
+    const { user, orders } = useApp();
+    const currentUser = user;
+
+    // --- LOADING GUARD ---
+    if (!currentUser) {
+        return (
+            <div className="flex h-screen items-center justify-center text-slate-500 font-bold">
+                Loading Data...
+            </div>
+        );
+    }
+
+    // Real-time Process Count (Active Jobs)
+    // Real-time Process Count (Active Jobs)
+    // USIR DATA HANTU: Use 'process' to ensure count is 0 if no actual 'process' jobs exist
+    const activeCount = orders ? orders.filter(job => job.status === 'process').length : 0;
+
+    // --- DEFINISI TUTOR STATS ---
+    const tutorStats = {
+        totalEarnings: currentUser?.wallet || 0,
+        rating: currentUser?.rating || 0,
+        reviewCount: currentUser?.reviewCount || 0,
+        activeJobs: activeCount
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-yellow-200">
             <div className="max-w-md mx-auto min-h-screen relative bg-slate-50 shadow-2xl flex flex-col">
@@ -13,7 +39,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-3">
                         <img src={logoImage} alt="SINEDI Logo" className="h-10 w-auto object-contain" />
                         <div>
-                            <h1 className="text-lg font-bold tracking-tight text-slate-900">Halo, Mahasiswa!</h1>
+                            <h1 className="text-lg font-bold tracking-tight text-slate-900">Halo, {currentUser?.name || 'User'}!</h1>
                             <p className="text-xs text-slate-500 font-medium">Selamat datang di SINEDI</p>
                         </div>
                     </div>
@@ -23,7 +49,7 @@ export default function Dashboard() {
                             <Bell className="w-5 h-5 text-slate-700" />
                         </button>
                         <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center text-sm font-bold text-slate-900 shadow-md ring-2 ring-white">
-                            A
+                            {currentUser?.name?.charAt(0) || 'U'}
                         </div>
                     </div>
                 </header>
@@ -53,7 +79,6 @@ export default function Dashboard() {
                                     Pesan Sekarang
                                 </Link>
                             </div>
-                            {/* Decorative Elements */}
                             <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl group-hover:bg-white/10 transition-colors duration-500"></div>
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-yellow-400/10 rounded-full translate-y-1/2 -translate-x-1/3 blur-2xl"></div>
                         </div>
@@ -65,7 +90,6 @@ export default function Dashboard() {
                             <h3 className="font-bold text-lg text-slate-900">Layanan Utama</h3>
                             <button className="text-xs text-yellow-600 hover:text-yellow-700 font-medium">Lihat Semua</button>
                         </div>
-                        {/* Passing props or relying on context/globalcss? DashboardGrid needs update for white cards */}
                         <DashboardGrid />
                     </div>
                 </main>

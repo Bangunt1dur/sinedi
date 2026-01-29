@@ -12,15 +12,25 @@ export default function ChatPage() {
     const location = useLocation();
 
     // Use job data from navigation state if available, else derive from context
+    // Use job data from navigation state if available, else derive from context
     const navJob = location.state?.job;
     const activeOrder = navJob || orders.find(o => o.id === orderId);
+
+    // DYNAMIC HEADER LOGIC: Determine who we are talking TO
+    const isTutor = user?.id === activeOrder?.tutorId;
+    const chatWith = isTutor
+        ? (activeOrder?.studentName || 'Mahasiswa')
+        : (activeOrder?.tutorName || 'Tutor');
+
+    // Status & Lock Logic
+    // Normalize status check (allow 'done', 'Done', 'completed')
+    const currentStatus = activeOrder?.status?.toLowerCase() || '';
+    const isLocked = currentStatus === 'done' || currentStatus === 'completed';
 
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const messagesEndRef = useRef(null);
-
-    const isLocked = activeOrder?.status === 'Done';
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -108,13 +118,18 @@ export default function ChatPage() {
                     <button onClick={() => navigate(-1)} className="hover:bg-white/10 p-2 rounded-full transition-colors">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
+                    {/* Avatar with Dynamic Initial or Random */}
                     <div className="w-10 h-10 rounded-full border-2 border-[#10B981] overflow-hidden bg-white">
-                        <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100" alt="Avatar" className="w-full h-full object-cover" />
+                        <img
+                            src={`https://ui-avatars.com/api/?name=${chatWith}&background=random`}
+                            alt="Avatar"
+                            className="w-full h-full object-cover"
+                        />
                     </div>
                     <div>
                         <h2 className="font-bold text-sm leading-tight flex items-center gap-2">
-                            {activeOrder?.tutorName || 'Tutor'}
-                            {isLocked && <span className="bg-red-500 text-[10px] px-1.5 rounded">Selesai</span>}
+                            {chatWith}
+                            {isLocked && <span className="bg-green-500 text-[10px] px-1.5 rounded">Selesai</span>}
                         </h2>
                         <p className="text-xs text-slate-300 line-clamp-1 w-40">
                             {activeOrder?.title || 'Chat Room'}
@@ -125,19 +140,19 @@ export default function ChatPage() {
 
             {/* Info Banner */}
             {isLocked ? (
-                <div className="bg-red-50 border-b border-red-100 p-3 flex items-center gap-3 shadow-sm z-10">
-                    <Lock className="w-5 h-5 text-red-500" />
+                <div className="bg-green-50 border-b border-green-100 p-3 flex items-center gap-3 shadow-sm z-10">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
                     <div>
-                        <h3 className="font-bold text-red-900 text-xs">Chat Terkunci</h3>
-                        <p className="text-red-700 text-[10px]">Tugas ini telah selesai. Anda tidak dapat mengirim pesan baru.</p>
+                        <h3 className="font-bold text-green-900 text-xs">Transaksi Selesai</h3>
+                        <p className="text-green-700 text-[10px]">Chat ini telah diarsipkan karena tugas sudah selesai.</p>
                     </div>
                 </div>
             ) : (
                 <div className="bg-blue-50 border-b border-blue-100 p-3 flex items-center gap-3 shadow-sm z-10">
-                    <CheckCircle className="w-5 h-5 text-blue-500" />
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
                     <div>
                         <h3 className="font-bold text-blue-900 text-xs">Status: {activeOrder?.status}</h3>
-                        <p className="text-blue-700 text-[10px]">Chat akan dikunci otomatis setelah tugas selesai.</p>
+                        <p className="text-blue-700 text-[10px]">Diskusi aktif. Sopan santun dijaga ya!</p>
                     </div>
                 </div>
             )}
@@ -153,8 +168,8 @@ export default function ChatPage() {
                 {messages.map(msg => (
                     <div key={msg.id} className={`flex ${msg.sender === user?.name || msg.role === user?.role ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[75%] p-4 shadow-sm relative text-sm leading-relaxed ${(msg.sender === user?.name || msg.role === user?.role)
-                                ? 'bg-[#DCF8C6] text-slate-900 rounded-2xl rounded-tr-none'
-                                : 'bg-white text-slate-900 rounded-2xl rounded-tl-none'
+                            ? 'bg-[#DCF8C6] text-slate-900 rounded-2xl rounded-tr-none'
+                            : 'bg-white text-slate-900 rounded-2xl rounded-tl-none'
                             }`}>
                             <p>{msg.text}</p>
                             <span className={`text-[10px] block mt-1 text-right ${(msg.sender === user?.name || msg.role === user?.role) ? 'text-slate-500' : 'text-slate-400'}`}>

@@ -9,13 +9,15 @@ export default function EditProfilePage() {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
     const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
+    const [loading, setLoading] = useState(false);
 
     const [formData, setFormData] = useState({
         name: user?.name || '',
-        email: user?.email || 'student@ui.ac.id',
-        phone: user?.phone || '081234567890',
-        university: user?.university || 'Universitas Indonesia',
-        major: user?.major || 'Teknik Informatika',
+        email: user?.email || '',
+        phone: user?.phone || '',
+        university: user?.university || '',
+        major: user?.major || '',
+        subjects: user?.subjects?.join(', ') || '',
         photo: user?.photo || null
     });
 
@@ -23,10 +25,61 @@ export default function EditProfilePage() {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        updateProfile(formData);
-        setNotification({ show: true, type: 'success', message: 'Profil berhasil diperbarui!' });
+        setLoading(true);
+
+        try {
+            // 1. Prepare Subjects (Ensure Array)
+            let finalSubjects = [];
+            if (formData.subjects) {
+                finalSubjects = typeof formData.subjects === 'string'
+                    ? formData.subjects.split(',').map(s => s.trim()).filter(s => s)
+                    : formData.subjects;
+            }
+
+            // 2. Prepare Data
+            const updatedData = {
+                ...formData,
+                subjects: finalSubjects,
+                photoURL: formData.photo, // Save as both for compatibility
+                // Force activate mentoring if Tutor
+                ...(user?.role === 'tutor' && {
+                    isMentoringActive: true,
+                    isTutor: true, // Explicit flag as requested
+                    role: 'tutor' // Reinforce role
+                })
+            };
+
+            // 3. Attempt Save
+            await updateProfile(updatedData);
+            setNotification({ show: true, type: 'success', message: 'Profil berhasil diperbarui!' });
+
+        } catch (error) {
+            console.error("Primary Save Failed:", error);
+
+            // 4. Fallback: If Text too large or unknown error, try saving ONLY text data (skip photo)
+            try {
+                console.warn("Attempting text-only save...");
+                const { photo, photoURL, ...textOnlyData } = formData;
+                // Recalculate subjects for text-only
+                const textSubjects = typeof formData.subjects === 'string'
+                    ? formData.subjects.split(',').map(s => s.trim()).filter(s => s)
+                    : formData.subjects;
+
+                await updateProfile({
+                    ...textOnlyData,
+                    subjects: textSubjects,
+                    ...(user?.role === 'tutor' && { isMentoringActive: true })
+                });
+                setNotification({ show: true, type: 'warning', message: 'Profil disimpan (Foto tidak berubah karena error).' });
+            } catch (secondError) {
+                console.error("Text-only Save Failed:", secondError);
+                setNotification({ show: true, type: 'error', message: 'Gagal menyimpan profil. Coba lagi.' });
+            }
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleCloseNotification = () => {
@@ -77,6 +130,8 @@ export default function EditProfilePage() {
                             onChange={handleFileChange}
                         />
                     </div>
+
+
                 </div>
 
                 <div className="space-y-4">
@@ -131,15 +186,37 @@ export default function EditProfilePage() {
                             className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                         />
                     </div>
+
+                    {/* Tutor Specific: Subjects */}
+                    {user?.role === 'tutor' && (
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Keahlian / Mata Kuliah (Pisahkan dengan koma)</label>
+                            <input
+                                type="text"
+                                name="subjects"
+                                placeholder="Contoh: Matematika, Fisika Dasar, Kalkulus"
+                                value={formData.subjects}
+                                onChange={handleChange}
+                                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Keahlian ini akan muncul di pencarian mahasiswa.</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="pt-4">
                     <button
                         type="submit"
-                        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        disabled={loading}
+                        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed disabled:shadow-none"
                     >
-                        <Save className="w-5 h-5" />
-                        Simpan Perubahan
+                        {loading && <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>}
+                        {loading ? 'Menyimpan...' : (
+                            <>
+                                <Save className="w-5 h-5" />
+                                Simpan Perubahan
+                            </>
+                        )}
                     </button>
                 </div>
             </form>

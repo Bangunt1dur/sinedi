@@ -47,7 +47,8 @@ export default function TutorSchedulePage() {
 
         updateProfile({
             availability: { ...schedule },
-            tutorProfile: { price: schedule.price }
+            tutorProfile: { price: schedule.price },
+            isMentoringActive: true // MENTORING VISIBILITY FIX
         });
 
         setNotification({ show: true, type: 'success', message: 'Pengaturan mentoring berhasil disimpan!' });

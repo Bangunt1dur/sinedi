@@ -11,7 +11,7 @@ export default function LoginPage() {
     const [selectedRole, setSelectedRole] = useState('student');
     const [error, setError] = useState('');
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
 
@@ -20,9 +20,21 @@ export default function LoginPage() {
             return;
         }
 
-        // Login with selected role
-        login(form.username, selectedRole);
-        navigate('/dashboard');
+        const ADMIN_EMAILS = ["admin@sinedi.com", "tamaziddan@gmail.com"];
+
+        try {
+            // Login with selected role
+            await login(form.username, selectedRole);
+
+            // Redirect based on identity
+            if (ADMIN_EMAILS.includes(form.username)) {
+                navigate('/admin/withdraw');
+            } else {
+                navigate('/dashboard');
+            }
+        } catch (err) {
+            setError('Login gagal. Periksa username/password.');
+        }
     };
 
     return (

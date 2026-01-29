@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Lock, CheckCircle, Search, ChevronLeft } from 'lucide-react';
+
 import { useApp } from '../context/AppContext';
+import { db } from '../firebase';
+import { collection, query, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
 import NotificationModal from '../components/NotificationModal';
 
 export default function VideoPage() {
     const { user, createOrder, videos, addVideo } = useApp();
     const navigate = useNavigate();
     const [selectedCategory, setSelectedCategory] = useState('Semua');
+    const [searchTerm, setSearchTerm] = useState('');
     const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
 
     // Tutor Upload State
@@ -61,22 +65,49 @@ export default function VideoPage() {
         }
     ];
 
-    // Merge demo videos with context videos for student view
-    // (In a real app, this would all come from the backend/context)
-    const displayVideos = [...demoVideos, ...videos.filter(v => !demoVideos.find(d => d.title === v.title))];
+    // Hybrid Video Data: Dummy + Real from Firestore
+    const [realVideos, setRealVideos] = useState([]);
 
-    const filteredVideos = selectedCategory === 'Semua'
-        ? displayVideos
-        : displayVideos.filter(v => v.category === selectedCategory);
+    // Fetch Real Videos
+    useEffect(() => {
+        const q = query(collection(db, 'videos'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetched = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setRealVideos(fetched);
+        }, (error) => {
+            console.error("Error fetching videos:", error);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // HYBRID MERGE: Dummy first, then Real
+    const displayVideos = [...demoVideos, ...realVideos];
+
+    const filteredVideos = displayVideos.filter(v => {
+        const matchesCategory = selectedCategory === 'Semua' || v.category === selectedCategory;
+        const matchesSearch = v.title.toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesCategory && matchesSearch;
+    });
 
     const handleBuy = (video) => {
+        // Prepare Price (Ensure Number)
+        const priceInt = parseInt(video.price) || 0;
+
         const orderId = createOrder({
             title: `Video: ${video.title}`,
+            videoTitle: video.title, // Added as requested
             deadline: '-',
             difficulty: 'video',
-            price: video.price,
-            type: 'video', // Explicit type
+            price: priceInt,
+            type: 'video_buy',
+            status: 'done', // WAJIB HARDCODE 'done'
             details: `Kategori: ${video.category}`,
+            resultLink: video.url || 'https://youtube.com',
+            tutorId: video.tutorId, // Ensure we take it from video object
+            studentId: user.id,
             tutorName: video.tutorName || 'Unknown Tutor',
             videoUrl: video.url || 'https://youtube.com'
         });
@@ -109,6 +140,9 @@ export default function VideoPage() {
             price: priceValue,
             url: uploadForm.url,
             tutorName: user.name,
+            tutorId: user.id, // Ensure uploaded video has tutorId
+            authorId: user.id, // Redundant but requested for explicit check
+            duration: '00:00' // Default duration or fetch it if possible
         });
 
         setIsUploading(false);
@@ -116,25 +150,11 @@ export default function VideoPage() {
         setNotification({ show: true, type: 'success', message: 'Video berhasil diupload dan siap dijual!' });
     };
 
-    // ... (inside the form) ...
-
-    <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Harga (Rp)</label>
-        <input
-            type="text"
-            className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-yellow-400"
-            placeholder="50000"
-            value={formatPrice(uploadForm.price)}
-            onChange={e => {
-                const val = parsePrice(e.target.value);
-                if (!isNaN(val)) setUploadForm({ ...uploadForm, price: val });
-            }}
-        />
-    </div>
-
     // TUTOR VIEW
     if (user.role === 'tutor') {
-        const myVideos = videos.filter(v => v.tutorName === user.name);
+        // MATCHING FIX: Use realVideos from Firestore, not mock 'videos'
+        // Also ensure we match by ID for robustness
+        const myVideos = realVideos.filter(v => v.tutorId === user.id);
 
         return (
             <div className="p-6 space-y-6 animate-in fade-in pb-24">
@@ -258,13 +278,12 @@ export default function VideoPage() {
                     <input
                         type="text"
                         placeholder="Cari materi..."
-                        className="bg-slate-50 border border-slate-100 rounded-full py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all w-48"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-slate-50 border border-slate-100 rounded-full py-2 pl-9 pr-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all w-48"
                     />
                 </div>
             </div>
-
-            {/* Content Categories (Optional/Hidden for exact mockup match, but good to keep) */}
-            {/* Used minimal style */}
 
             {/* Video Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -283,6 +302,14 @@ export default function VideoPage() {
                             <div className="absolute bottom-3 right-3 bg-black/80 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1 rounded-full">
                                 {video.duration || 'Video'}
                             </div>
+
+                            {/* Author Badge (NEW) */}
+                            {video.tutorName && (
+                                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md text-slate-900 text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                    Oleh: {video.tutorName}
+                                </div>
+                            )}
                         </div>
 
                         {/* Content */}

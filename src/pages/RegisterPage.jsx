@@ -5,11 +5,12 @@ import logoImage from '../assets/logo.png';
 
 export default function RegisterPage() {
     const navigate = useNavigate();
-    const { login, showAlert } = useApp();
+    const context = useApp();
+    const { showAlert } = context;
 
     const [form, setForm] = useState({ name: '', username: '', password: '', role: 'student' });
 
-    const handleRegister = (e) => {
+    const handleRegister = async (e) => {
         e.preventDefault();
 
         if (!form.name || !form.username || !form.password) {
@@ -17,12 +18,12 @@ export default function RegisterPage() {
             return;
         }
 
-        // Simulating Registration by logging in immediately
-        // In real app, this would hit an API endpoint
-        login(form.name, form.role);
+        const success = await context.register(form.name, form.username, form.password, form.role);
 
-        showAlert(`Selamat datang, ${form.name}!`, 'Registrasi Berhasil', 'success');
-        navigate('/dashboard');
+        if (success) {
+            showAlert(`Selamat datang, ${form.name}!`, 'Registrasi Berhasil', 'success');
+            navigate('/dashboard');
+        }
     };
 
     return (
