@@ -605,7 +605,6 @@ export function AppProvider({ children }) {
             createOrder, payOrder, takeJob, finishJob, withdrawFunds,
             videos, addVideo, notifications, updateProfile, updateOrder,
             addNotification, markNotificationRead, globalAlert, showAlert, closeAlert,
-            addNotification, markNotificationRead, globalAlert, showAlert, closeAlert,
             submitReview, tutorStats, recalculateWallet
         }}>
             {children}
