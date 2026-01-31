@@ -290,7 +290,10 @@ export default function MentoringPage() {
                                             const startHour = parseInt(timeStart.split(':')[0]);
                                             const endHour = parseInt(timeEnd.split(':')[0]);
 
-                                            days.forEach(day => {
+                                            // Fix: Ensure unique days to prevent duplicate keys
+                                            const uniqueDays = [...new Set(days)];
+
+                                            uniqueDays.forEach(day => {
                                                 for (let h = startHour; h < endHour; h++) {
                                                     const timeString = `${h}:00`;
                                                     const fullSlot = `${day}, ${timeString}`;
